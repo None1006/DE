@@ -1,0 +1,154 @@
+"""
+2023.7.24 阿冇版本
+经典DE算法，DE/rand/1算子
+"""
+
+
+import numpy as np
+
+
+def function1(pop):
+    val = pop[0]**2 + 10**6 * np.matmul(pop[1:-1], pop[1:-1])
+    return val
+
+
+class DE:
+
+    def __init__(self, dim, pop_size, xu, xl, f, cr):
+        self.dim = dim
+        self.pop_size = pop_size
+        self.xu = xu
+        self.xl = xl
+        self.f = f
+        self.cr = cr
+        self.pop = np.zeros(shape=[self.pop_size, self.dim])
+        self.vi = np.zeros(shape=[self.pop_size, self.dim])
+        self.ui = np.zeros(shape=[self.pop_size, self.dim])
+        self.r1 = np.empty(shape=[1, self.pop_size])
+        self.r2 = np.empty(shape=[1, self.pop_size])
+        self.r3 = np.empty(shape=[1, self.pop_size])
+        self.val_p = np.empty(shape=[self.pop_size, 1])
+        self.val_o= np.empty(shape=[self.pop_size, 1])
+        self.best_val = None
+
+    def initialization(self):
+
+        self.pop = np.tile(self.xl, (self.pop_size, self.dim)) + \
+                   np.random.rand(self.pop_size, self.dim)*np.tile((self.xu-self.xl), (self.pop_size, self.dim))
+        return self.pop
+
+    def generation(self):
+
+        self.r1 = np.floor(np.random.rand(1, self.pop_size)*self.pop_size)
+        r0 = np.arange(self.pop_size).reshape(1, self.pop_size)
+        pos = np.zeros(shape=[1, self.pop_size])
+        for i in range(100):
+            for j in range(self.pop_size):
+                pos[0, j] = (self.r1[0, j] == r0[0, j])
+            if np.sum(pos, 1) == 0:
+                break
+            else:
+                dim = np.sum(pos, 1).astype(int)
+                dim = dim[0]
+                cm = np.floor(np.random.rand(1, dim)*self.pop_size)
+                self.r1[pos.astype(bool)] = cm[0]
+
+        self.r2 = np.floor(np.random.rand(1, self.pop_size) * self.pop_size)
+        for i in range(100):
+            for j in range(self.pop_size):
+                pos[0, j] = (self.r2[0, j] == self.r1[0, j] or self.r2[0, j] == r0[0, j])
+            if np.sum(pos, 1) == 0:
+                break
+            else:
+                dim = np.sum(pos, 1).astype(int)
+                dim = dim[0]
+                cm = np.floor(np.random.rand(1, dim) * self.pop_size)
+                self.r2[pos.astype(bool)] = cm[0]
+
+        self.r3 = np.floor(np.random.rand(1, self.pop_size) * self.pop_size)
+        for i in range(100):
+            for j in range(self.pop_size):
+                pos[0, j] = (self.r3[0, j] == self.r3[0, j] or
+                             self.r3[0, j] == self.r1[0, j] or
+                             self.r2[0, j] == r0[0, j])
+            if np.sum(pos, 1) == 0:
+                break
+            else:
+                dim = np.sum(pos, 1).astype(int)
+                dim = dim[0]
+                cm = np.floor(np.random.rand(1, dim) * self.pop_size)
+                self.r3[pos.astype(bool)] = cm[0]
+        return self.r1, self.r2, self.r3
+
+    def mutation(self):
+        pop = self.pop
+        r_1 = self.r1.astype(int)
+        r_2 = self.r2.astype(int)
+        r_3 = self.r3.astype(int)
+        self.vi = pop[r_1[0]] + self.f * (pop[r_2[0]]-pop[r_3[0]])  # DE/rand/1
+        return self.vi
+
+    def bdc(self):
+        for i in range(self.pop_size):
+            pos = (self.vi[i] < self.xl)  # check the lower pound
+            para = self.vi[i]
+            para[pos] = 2*self.xl - para[pos]
+            self.vi[i] = para
+
+        for i in range(self.pop_size):
+            pos = (self.vi[i] > self.xu)  # check the lower pound
+            para = self.vi[i]
+            para[pos] = 2*self.xu - para[pos]
+            self.vi[i] = para
+        for i in range(self.pop_size):
+            pos_ = (self.vi[i] > self.xu)
+            para_ = self.vi[i]
+            para_[pos_] = self.xu
+            self.vi[i] = para_
+            pos_ = (self.vi[i] < self.xl)
+            para_ = self.vi[i]
+            para_[pos_] = self.xl
+            self.vi[i] = para_
+            return self.vi
+
+    def crossover(self):
+        mask = (np.random.rand(self.pop_size, self.dim) > self.cr)  # indicate the elements from the parents
+        j_rand = np.random.randint(self.dim, size=(self.pop_size, 1))
+        for i in range(self.pop_size):
+            mask[i, j_rand[i]] = False
+        self.ui = self.vi
+        for i in range(self.pop_size):
+            ui = self.ui[i]
+            pop = self.pop[i]
+            ui[mask[i]] = pop[mask[i]]
+            self.ui[i] = ui
+        return self.ui
+
+    def selection(self):
+        for i in range(self.pop_size):
+            self.val_p[i] = function1(self.pop[i])
+        for i in range(self.pop_size):
+            self.val_o[i] = function1(self.ui[i])
+        for i in range(self.pop_size):
+            if self.val_o[i] < self.val_p[i]:
+                self.val_p[i] = self.val_o[i]
+                self.pop[i] = self.ui[i]
+        self.best_val = self.val_p.min()
+        return self.best_val, self.pop
+
+
+n = 30
+Pop_size = 100
+Gde = DE(n, Pop_size, 100, -100, 0.5, 0.9)
+g = 0
+G = n*10000/Pop_size
+pop_old = Gde.initialization()
+while g < G:
+    r1, r2, r3 = Gde.generation()
+    Vi = Gde.mutation()
+    Vi_use = Gde.bdc()
+    Ui = Gde.crossover()
+    b_val, pop1 = Gde.selection()
+    print(b_val)
+    g = g+1
+
